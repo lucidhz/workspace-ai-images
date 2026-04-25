@@ -1,0 +1,108 @@
+name: Build and Push to Docker Hub
+# GitHub Action workflow to build and push Docker images to Docker Hub.
+# Allows manual selection of Dockerfile and customization of base image and tags.
+# Supports all kasm-series Dockerfiles from this repository.
+#
+# Hints (Karpathy's 4 Rules):
+# 1. Think Before Coding: State assumptions explicitly. If uncertain, ask.
+#    - Multiple interpretations? Present them, don't pick silently.
+#    - Simpler approach exists? Say so. Push back when warranted.
+#    - Something unclear? Stop. Name what's confusing. Ask.
+# 2. Simplicity First: Minimum code that solves the problem. Nothing speculative.
+#    - No features beyond what was asked.
+#    - No abstractions for single-use code.
+#    - No speculative "flexibility" or "configurability".
+# 3. Surgical Changes Only: Every changed line must trace to the user's request.
+#    - Remove only dead code YOUR changes created.
+# 4. Goal-Driven Execution: Define success criteria. Loop until verified.
+#    - "Add validation" -> Write tests for invalid inputs, make them pass.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dockerfile:
+        description: 'Select Dockerfile to build'
+        required: true
+        type: choice
+        options:
+          - dockerfile-kasm-claude-code
+          - dockerfile-kasm-codex-cli
+          - dockerfile-kasm-cursor
+          - dockerfile-kasm-gemini-cli
+          - dockerfile-kasm-squid-cache
+          - dockerfile-kasm-ubuntu-agentic
+          - dockerfile-kasm-ubuntu-anythingllm
+          - dockerfile-kasm-ubuntu-easydiffusion
+          - dockerfile-kasm-ubuntu-jammy-desktop-ai-dev
+          - dockerfile-kasm-ubuntu-ml-engineering
+          - dockerfile-kasm-ubuntu-nvidia
+          - dockerfile-kasm-ubuntu-nvidia-pytorch
+          - dockerfile-kasm-ubuntu-nvidia-tensorflow
+          - dockerfile-kasm-ubuntu-paprisma
+      base_image:
+        description: 'Base image name'
+        required: false
+        type: string
+        default: 'core-ubuntu-jammy'
+      base_tag:
+        description: 'Base image tag'
+        required: false
+        type: string
+        default: 'develop'
+      docker_hub_repo:
+        description: 'Docker Hub repository name'
+        required: false
+        type: string
+        default: ''
+      tag_suffix:
+        description: 'Tag suffix (e.g., v1.0.0)'
+        required: false
+        type: string
+        default: ''
+
+env:
+  REGISTRY: docker.io
+  BASE_TAG: ${{ inputs.base_tag != '' && inputs.base_tag || 'develop' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract image name from dockerfile
+        id: image_info
+        run: |
+          DOCKERFILE=${{ github.event.inputs.dockerfile }}
+          IMAGE_NAME=$(echo "$DOCKERFILE" | sed 's/dockerfile-kasm-//')
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "Selected Dockerfile: $DOCKERFILE"
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./${{ github.event.inputs.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.image_info.outputs.IMAGE_NAME }}:${{ github.ref_name }}${{ inputs.tag_suffix && format('-{0}', inputs.tag_suffix) || '' }}
+            ${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.image_info.outputs.IMAGE_NAME }}:latest
+          build-args: |
+            BASE_IMAGE=${{ github.event.inputs.base_image || 'core-ubuntu-jammy' }}
+            BASE_TAG=${{ env.BASE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
