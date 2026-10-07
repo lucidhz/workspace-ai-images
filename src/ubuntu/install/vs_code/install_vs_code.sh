@@ -10,11 +10,19 @@ apt-get install -y ./vs_code.deb
 # Desktop icon
 mkdir -p /usr/share/icons/hicolor/apps
 wget -O /usr/share/icons/hicolor/apps/vscode.svg https://kasm-static-content.s3.amazonaws.com/icons/vscode.svg
-sed -i '/Icon=/c\Icon=/usr/share/icons/hicolor/apps/vscode.svg' /usr/share/applications/code.desktop
-sed -i 's#/usr/share/code/code#/usr/share/code/code --no-sandbox##' /usr/share/applications/code.desktop
-cp /usr/share/applications/code.desktop $HOME/Desktop
-chmod +x $HOME/Desktop/code.desktop
-chown 1000:1000 $HOME/Desktop/code.desktop
+
+
+
+DESKTOP=$(dpkg -L code | grep -E '/usr/share/applications/.*\.desktop$' | head -n1)
+
+if [ -n "$DESKTOP" ] && [ -f "$DESKTOP" ]; then
+    sed -i '/Icon=/c\Icon=/usr/share/icons/hicolor/apps/vscode.svg' "$DESKTOP"
+    sed -i 's#/usr/share/code/code#/usr/share/code/code --no-sandbox##' "$DESKTOP"
+    cp "$DESKTOP" $HOME/Desktop/
+    chmod +x $HOME/Desktop/*.desktop
+    chown 1000:1000 $HOME/Desktop/*.desktop
+fi
+
 rm vs_code.deb
 
 if [[ -n "${VSCODE_EXTENSIONS:-}" ]]; then
